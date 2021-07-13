@@ -26,7 +26,9 @@ build = {
 			sources = {
 				'src/cctx.c',
 				'src/cctxparams.c',
+				'src/cdict.c',
 				'src/dctx.c',
+				'src/ddict.c',
 				'src/main.c',
 				'src/util.c',
 			},

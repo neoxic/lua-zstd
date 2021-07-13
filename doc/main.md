@@ -31,10 +31,18 @@ Returns an instance of [Compression Context].
 ### zstd.CCtxParams()
 Returns an instance of [Compression Context Parameters].
 
+### zstd.CDict(data, cctxparams)
+Returns an instance of [Compression Dictionary].
+
 ### zstd.DCtx()
 Returns an instance of [Decompression Context].
+
+### zstd.DDict(data)
+Returns an instance of [Decompression Dictionary].
 
 
 [Compression Context]: cctx.md
 [Compression Context Parameters]: cctxparams.md
+[Compression Dictionary]: cdict.md
 [Decompression Context]: dctx.md
+[Decompression Dictionary]: ddict.md

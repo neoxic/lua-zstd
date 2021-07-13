@@ -132,6 +132,18 @@ static int m_setPledgedSrcSize(lua_State *L) {
 	return 0;
 }
 
+/* ARG: cdict */
+static int m_refCDict(lua_State *L) {
+	ZSTD_CCtx *cctx = checkcctx(L, 1);
+	ZSTD_CDict *cdict = checkcdict(L, 2);
+	lua_settop(L, 2);
+	lua_getuservalue(L, 1);
+	lua_insert(L, 2);
+	lua_rawseti(L, 2, 1);
+	zstd__check(L, ZSTD_CCtx_refCDict(cctx, cdict));
+	return 0;
+}
+
 static const char *const s_op[] = {
 	"continue",
 	"flush",
@@ -142,14 +154,13 @@ static const char *const s_op[] = {
 /* ARG: data, [op]
 ** RES: data | nil, error */
 static int m_compressStream(lua_State *L) {
+	size_t res, slen, spos = 0, dlen = 0, dpos = 0, blen = 100;
+	void *ud, *buf, *dst = 0;
+	int err = 0;
+	lua_Alloc allocf = lua_getallocf(L, &ud);
 	ZSTD_CCtx *cctx = checkcctx(L, 1);
-	size_t slen;
 	const void *src = luaL_checklstring(L, 2, &slen);
 	int op = luaL_checkoption(L, 3, s_op[0], s_op);
-	void *ud, *buf, *dst = 0;
-	lua_Alloc allocf = lua_getallocf(L, &ud);
-	size_t res, spos = 0, dpos = 0, dlen = 0, blen = 100;
-	int err = 0;
 	for (;;) {
 		if (!(buf = allocf(ud, dst, dlen, blen))) {
 			err = ZSTD_error_memory_allocation;
@@ -172,11 +183,35 @@ static int m_compressStream(lua_State *L) {
 	return 1;
 }
 
+/* ARG: data, cdict
+** RES: data | nil, error */
+static int m_compressBlock(lua_State *L) {
+	size_t res, slen, dlen;
+	void *ud, *dst;
+	lua_Alloc allocf = lua_getallocf(L, &ud);
+	ZSTD_CCtx *cctx = checkcctx(L, 1);
+	const void *src = luaL_checklstring(L, 2, &slen);
+	ZSTD_CDict *cdict = checkcdict(L, 3);
+	zstd__check(L, ZSTD_compressBegin_usingCDict(cctx, cdict));
+	checkmem(L, dst = allocf(ud, 0, 0, dlen = ZSTD_getBlockSize(cctx)));
+	if (zstd__error(L, res = ZSTD_compressBlock(cctx, dst, dlen, src, slen))) {
+		allocf(ud, dst, dlen, 0);
+		return 2;
+	}
+	lua_pushlstring(L, dst, res);
+	allocf(ud, dst, dlen, 0);
+	return 1;
+}
+
 /* ARG: [mode] */
 static int m_reset(lua_State *L) {
 	ZSTD_CCtx *cctx = checkcctx(L, 1);
 	int mode = zstd__checkresetmode(L, 2);
 	zstd__check(L, ZSTD_CCtx_reset(cctx, mode));
+	if (mode == ZSTD_reset_session_only) return 0; // Dictionary stays referenced
+	lua_getuservalue(L, 1);
+	lua_pushnil(L);
+	lua_rawseti(L, -2, 1);
 	return 0;
 }
 
@@ -193,7 +228,9 @@ static const luaL_Reg t_cctx[] = {
 	{"setParameter", m_setParameter},
 	{"setParameters", m_setParameters},
 	{"setPledgedSrcSize", m_setPledgedSrcSize},
+	{"refCDict", m_refCDict},
 	{"compressStream", m_compressStream},
+	{"compressBlock", m_compressBlock},
 	{"reset", m_reset},
 	{"__gc", m__gc},
 	{0, 0}
@@ -203,6 +240,8 @@ static const luaL_Reg t_cctx[] = {
 int zstd__newCCtx(lua_State *L) {
 	ZSTD_CCtx **cctx = lua_newuserdata(L, sizeof(*cctx));
 	checkmem(L, *cctx = ZSTD_createCCtx());
+	lua_createtable(L, 1, 0);
+	lua_setuservalue(L, 1);
 	if (luaL_newmetatable(L, TYPE_CCTX)) {
 		lua_pushboolean(L, 0);
 		lua_setfield(L, -2, "__metatable");

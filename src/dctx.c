@@ -27,7 +27,6 @@ static const char *const s_param[] = {
 	"format",
 	"stableOutBuffer",
 	"forceIgnoreChecksum",
-	"refMultipleDDicts",
 	0
 };
 
@@ -63,16 +62,27 @@ static int m_setParameter(lua_State *L) {
 	return 0;
 }
 
+/* ARG: ddict */
+static int m_refDDict(lua_State *L) {
+	ZSTD_DCtx *dctx = checkdctx(L, 1);
+	ZSTD_DDict *ddict = checkddict(L, 2);
+	lua_settop(L, 2);
+	lua_getuservalue(L, 1);
+	lua_insert(L, 2);
+	lua_rawseti(L, 2, 1);
+	zstd__check(L, ZSTD_DCtx_refDDict(dctx, ddict));
+	return 0;
+}
+
 /* ARG: data
 ** RES: data, ['end'] | nil, error */
 static int m_decompressStream(lua_State *L) {
-	ZSTD_DCtx *dctx = checkdctx(L, 1);
-	size_t slen;
-	const void *src = luaL_checklstring(L, 2, &slen);
+	size_t res, slen, spos = 0, dlen = 0, dpos = 0, blen = 100;
 	void *ud, *buf, *dst = 0;
-	lua_Alloc allocf = lua_getallocf(L, &ud);
-	size_t res, spos = 0, dpos = 0, dlen = 0, blen = 100;
 	int err = 0;
+	lua_Alloc allocf = lua_getallocf(L, &ud);
+	ZSTD_DCtx *dctx = checkdctx(L, 1);
+	const void *src = luaL_checklstring(L, 2, &slen);
 	luaL_argcheck(L, slen, 2, "empty data"); /* Ensure forward progress */
 	for (;;) {
 		if (!(buf = allocf(ud, dst, dlen, blen))) {
@@ -97,11 +107,38 @@ static int m_decompressStream(lua_State *L) {
 	return 2;
 }
 
+/* ARG: data, ddict
+** RES: data | nil, error */
+static int m_decompressBlock(lua_State *L) {
+	size_t res, slen, dlen;
+	void *ud, *dst;
+	lua_Alloc allocf = lua_getallocf(L, &ud);
+	ZSTD_DCtx *dctx = checkdctx(L, 1);
+	const void *src = luaL_checklstring(L, 2, &slen);
+	ZSTD_DDict *ddict = checkddict(L, 3);
+	int wlog;
+	zstd__check(L, ZSTD_decompressBegin_usingDDict(dctx, ddict));
+	zstd__check(L, ZSTD_DCtx_getParameter(dctx, ZSTD_d_windowLogMax, &wlog));
+	if (wlog > ZSTD_BLOCKSIZELOG_MAX) wlog = ZSTD_BLOCKSIZELOG_MAX;
+	checkmem(L, dst = allocf(ud, 0, 0, dlen = (size_t)1 << wlog));
+	if (zstd__error(L, res = ZSTD_decompressBlock(dctx, dst, dlen, src, slen))) {
+		allocf(ud, dst, dlen, 0);
+		return 2;
+	}
+	lua_pushlstring(L, dst, res);
+	allocf(ud, dst, dlen, 0);
+	return 1;
+}
+
 /* ARG: [mode] */
 static int m_reset(lua_State *L) {
 	ZSTD_DCtx *dctx = checkdctx(L, 1);
 	int mode = zstd__checkresetmode(L, 2);
 	zstd__check(L, ZSTD_DCtx_reset(dctx, mode));
+	if (mode == ZSTD_reset_session_only) return 0; // Dictionary stays referenced
+	lua_getuservalue(L, 1);
+	lua_pushnil(L);
+	lua_rawseti(L, -2, 1);
 	return 0;
 }
 
@@ -116,7 +153,9 @@ static int m__gc(lua_State *L) {
 static const luaL_Reg t_dctx[] = {
 	{"getParameter", m_getParameter},
 	{"setParameter", m_setParameter},
+	{"refDDict", m_refDDict},
 	{"decompressStream", m_decompressStream},
+	{"decompressBlock", m_decompressBlock},
 	{"reset", m_reset},
 	{"__gc", m__gc},
 	{0, 0}
@@ -126,6 +165,8 @@ static const luaL_Reg t_dctx[] = {
 int zstd__newDCtx(lua_State *L) {
 	ZSTD_DCtx **dctx = lua_newuserdata(L, sizeof(*dctx));
 	checkmem(L, *dctx = ZSTD_createDCtx());
+	lua_createtable(L, 1, 0);
+	lua_setuservalue(L, 1);
 	if (luaL_newmetatable(L, TYPE_DCTX)) {
 		lua_pushboolean(L, 0);
 		lua_setfield(L, -2, "__metatable");

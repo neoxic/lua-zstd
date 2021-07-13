@@ -90,7 +90,9 @@ static const luaL_Reg l_zstd[] = {
 	{"getFrameContentSize", f_getFrameContentSize},
 	{"CCtx", zstd__newCCtx},
 	{"CCtxParams", zstd__newCCtxParams},
+	{"CDict", zstd__newCDict},
 	{"DCtx", zstd__newDCtx},
+	{"DDict", zstd__newDDict},
 	{0, 0}
 };
 

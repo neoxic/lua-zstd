@@ -33,13 +33,17 @@
 
 #define TYPE_CCTX "zstd.CCtx"
 #define TYPE_CCTXPARAMS "zstd.CCtxParams"
+#define TYPE_CDICT "zstd.CDict"
 
 #define TYPE_DCTX "zstd.DCtx"
+#define TYPE_DDICT "zstd.DDict"
 
 #define checkcctx(L, arg) (*(ZSTD_CCtx **)luaL_checkudata(L, arg, TYPE_CCTX))
 #define checkcctxparams(L, arg) (*(ZSTD_CCtx_params **)luaL_checkudata(L, arg, TYPE_CCTXPARAMS))
+#define checkcdict(L, arg) (*(ZSTD_CDict **)luaL_checkudata(L, arg, TYPE_CDICT))
 
 #define checkdctx(L, arg) (*(ZSTD_DCtx **)luaL_checkudata(L, arg, TYPE_DCTX))
+#define checkddict(L, arg) (*(ZSTD_DDict **)luaL_checkudata(L, arg, TYPE_DDICT))
 
 #define checkmem(L, cond) ((void)((cond) || luaL_error(L, "not enough memory")))
 #define checkrange(L, cond, arg) luaL_argcheck(L, cond, arg, "value out of range")
@@ -63,8 +67,10 @@ EXPORT int luaopen_zstd(lua_State *L);
 
 int zstd__newCCtx(lua_State *L);
 int zstd__newCCtxParams(lua_State *L);
+int zstd__newCDict(lua_State *L);
 
 int zstd__newDCtx(lua_State *L);
+int zstd__newDDict(lua_State *L);
 
 int zstd__pusherror(lua_State *L, int err);
 int zstd__error(lua_State *L, size_t res);
