@@ -29,7 +29,7 @@
 #include <zstd_errors.h>
 
 #define MODNAME "lua-zstd"
-#define VERSION "0.1.0"
+#define VERSION "0.2.0"
 
 #define TYPE_CCTX "zstd.CCtx"
 #define TYPE_CCTXPARAMS "zstd.CCtxParams"
